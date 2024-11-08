@@ -1,0 +1,42 @@
+{
+  "en": {
+    "pattern": "Google review of (.*?) by (.*)",
+    "prefix": "Google review of",
+    "separator": "by"
+  },
+  "de": {
+    "pattern": "Google-Rezension über (.*?) von (.*)",
+    "prefix": "Google-Rezension über",
+    "separator": "von"
+  },
+  "es": {
+    "pattern": "Reseña de Google de (.*?) por (.*)",
+    "prefix": "Reseña de Google de",
+    "separator": "por"
+  },
+  "fr": {
+    "pattern": "Avis Google sur (.*?) par (.*)",
+    "prefix": "Avis Google sur",
+    "separator": "par"
+  },
+  "it": {
+    "pattern": "Recensione Google di (.*?) di (.*)",
+    "prefix": "Recensione Google di",
+    "separator": "di"
+  },
+  "pt": {
+    "pattern": "Avaliação do Google de (.*?) por (.*)",
+    "prefix": "Avaliação do Google de",
+    "separator": "por"
+  },
+  "nl": {
+    "pattern": "Google recensie van (.*?) door (.*)",
+    "prefix": "Google recensie van",
+    "separator": "door"
+  },
+  "pl": {
+    "pattern": "Recenzja Google (.*?) przez (.*)",
+    "prefix": "Recenzja Google",
+    "separator": "przez"
+  }
+}
