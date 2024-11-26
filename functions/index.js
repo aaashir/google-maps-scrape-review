@@ -34,7 +34,6 @@ const decodeHTMLEntities = (text) => {
     if (entities[entity]) {
       return entities[entity];
     } else {
-      // For numeric entities like &#160;
       const match = entity.match(/&#(\d+);/);
       if (match) {
         return String.fromCharCode(match[1]);
@@ -44,14 +43,53 @@ const decodeHTMLEntities = (text) => {
   });
 };
 
-// Convert string patterns from JSON to RegExp objects
-const LANGUAGE_PATTERNS = Object.entries(languagePatterns).reduce((acc, [lang, config]) => {
-  acc[lang] = {
-    ...config,
-    pattern: new RegExp(config.pattern)
-  };
-  return acc;
-}, {});
+// Extract content from meta tag
+const extractMetaContent = (html, itemprop) => {
+  const metaTag = html.match(new RegExp(`<meta[^>]*itemprop="${itemprop}"[^>]*>`, 'i'))?.[0] || '';
+  const contentMatch = metaTag.match(/content=(['"])(.*?)\1/);
+  return contentMatch ? decodeHTMLEntities(contentMatch[2]) : '';
+};
+
+const parseReviewTitle = (title) => {
+  // German format: "Google-Rezension über {businessName} von {reviewerName}"
+  const germanMatch = title.match(/Google-Rezension über (.*?) von (.*)/i);
+  if (germanMatch) {
+    return {
+      businessName: germanMatch[1].trim(),
+      reviewerName: germanMatch[2].trim()
+    };
+  }
+
+  // English format: "Google review of {businessName} by {reviewerName}"
+  const englishMatch = title.match(/Google review of (.*?) by (.*)/i);
+  if (englishMatch) {
+    return {
+      businessName: englishMatch[1].trim(),
+      reviewerName: englishMatch[2].trim()
+    };
+  }
+
+  return { businessName: '', reviewerName: '' };
+};
+
+// Get review content based on language
+const getReviewContent = (description, language) => {
+  // Remove all star characters from the description
+  const cleanDescription = description.replace(/[★☆]/g, '').trim();
+  
+  if (!cleanDescription) {
+    return language === 'de' ? 'Es handelt sich um eine Sterne-Bewertung ohne Begründung' : 'This is a star rating without any review text';
+  }
+
+  // If there's text in quotes, extract it
+  const quoteMatch = cleanDescription.match(/^"(.*?)"$/);
+  if (quoteMatch) {
+    return quoteMatch[1].trim();
+  }
+
+  // If there's any text after cleaning, return it
+  return cleanDescription || (language === 'de' ? 'Es handelt sich um eine Sterne-Bewertung ohne Begründung' : 'This is a star rating without any review text');
+};
 
 exports.googleReviewScraper = functions
   .runWith({
@@ -90,39 +128,18 @@ exports.googleReviewScraper = functions
       const langMatch = html.match(/<html[^>]*lang="([^"]*)"/) || [];
       const pageLang = langMatch[1]?.split('-')[0] || 'en';
 
-      // First get the meta tag with itemprop="description"
-      const metaTag = html.match(/<meta[^>]*itemprop="description"[^>]*>/i)?.[0] || '';
-      
-      // Then extract the content attribute
-      const contentMatch = metaTag.match(/content=(['"])(.*?)\1/);
-      const fullContent = contentMatch ? contentMatch[2] : '';
+      // Extract meta information
+      const nameContent = extractMetaContent(html, 'name');
+      const description = extractMetaContent(html, 'description');
 
-      // Extract the review content - everything between quotes after the stars
-      const reviewRegex = /^[★☆]+\s*"(.*?)"$/;
-      const reviewMatch = fullContent.match(reviewRegex);
-      const reviewContent = reviewMatch ? decodeHTMLEntities(reviewMatch[1]) : '';
-
-      // Get name meta
-      const nameMatch = html.match(/<meta[^>]*content=['"]([^'"]*)['"][^>]*itemprop=['"]name['"]/i);
-      const name = nameMatch ? nameMatch[1] : '';
-
-      // Try to match the review pattern in different languages
-      let businessName = '';
-      let reviewerName = '';
-      let detectedLanguage = '';
-
-      for (const [lang, pattern] of Object.entries(LANGUAGE_PATTERNS)) {
-        const match = name.match(pattern.pattern);
-        if (match) {
-          businessName = decodeHTMLEntities(match[1].trim());
-          reviewerName = decodeHTMLEntities(match[2].trim());
-          detectedLanguage = lang;
-          break;
-        }
-      }
+      // Parse name content for business and reviewer names
+      const { businessName, reviewerName } = parseReviewTitle(nameContent);
 
       // Count stars for rating
-      const rating = (fullContent.match(/★/g) || []).length;
+      const rating = (description.match(/★/g) || []).length;
+
+      // Get review content with language-specific fallback
+      const reviewContent = getReviewContent(description, pageLang);
 
       const data = {
         businessName,
@@ -130,8 +147,8 @@ exports.googleReviewScraper = functions
         rating,
         reviewContent,
         language: {
-          detected: detectedLanguage || pageLang,
-          pageLang: pageLang
+          detected: pageLang,
+          pageLang
         },
       };
 
@@ -146,6 +163,10 @@ exports.googleReviewScraper = functions
             reviewContent: !!data.reviewContent
           },
           statusCode: response.status,
+          rawMeta: {
+            name: nameContent,
+            description
+          }
         }
       });
 
